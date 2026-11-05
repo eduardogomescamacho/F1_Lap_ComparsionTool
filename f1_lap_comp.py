@@ -8,9 +8,9 @@ fastf1.Cache.enable_cache('cache_dir')
 
 def main():
   print("Welcome to f1 lap comparsion, here you'll be able to analyse two different laps from an f1 session and understand it's differences")
-  event1, event2 = get_info()
-  telemetry1, telemetry2, full_name1, full_name2, session_ident_1, session_ident_2, lap1_time, lap2_time = get_data(event1, event2)
-  distance =compare_laps(telemetry1, telemetry2, full_name1, full_name2, session_ident_1, session_ident_2, lap1_time, lap2_time)
+  event1, event2, year1, year2 = get_info()
+  telemetry1, telemetry2, full_name1, full_name2, session_ident_1, session_ident_2, lap1_time, lap2_time = get_data(event1, event2, year1, year2)
+  distance =compare_laps(telemetry1, telemetry2, full_name1, full_name2, session_ident_1, session_ident_2, lap1_time, lap2_time, year1, year2)
   
 
 
@@ -22,11 +22,12 @@ def get_info():
        
         while True:
           try:
-           year = input("In which year did that event take place (the fastf1 module only contains data from 2018 onwards so make sure to input a valid year) ").strip()
+           year1 = input("In which year did that event take place (the fastf1 module only contains data from 2018 onwards so make sure to input a valid year) ").strip()
+           year2 = year1
            
 
-           if year.isnumeric() and int(year) >= 2018:
-               calendar = fastf1.get_event_schedule(int(year))
+           if year1.isnumeric() and int(year1) >= 2018:
+               calendar = fastf1.get_event_schedule(int(year1))
                event_names = calendar['EventName'].str.lower().values
                locations = calendar['Location'].str.lower().values
                countries = calendar['Country'].str.lower().values
@@ -34,7 +35,7 @@ def get_info():
                    circuit = input("Please input the circuit in which the laps were made: " ).strip().lower()
 
                    if circuit in event_names or circuit in locations or circuit in countries:
-                       return fastf1.get_event(int(year), circuit), fastf1.get_event(int(year), circuit)
+                       return fastf1.get_event(int(year1), circuit), fastf1.get_event(int(year1), circuit), year1, year2
                    
                    else:
                        print("Invalid circuit name, please try again.")
@@ -66,7 +67,7 @@ def get_info():
                     while True:
                         circuit = input("Please input the circuit in the laps were made: " ).strip().lower()
                         if (circuit in event_names1 or circuit in locations1 or circuit in countries1) and (circuit in event_names2 or circuit in locations2 or circuit in countries2):
-                            return fastf1.get_event(int(year1), circuit), fastf1.get_event(int(year2), circuit)
+                            return fastf1.get_event(int(year1), circuit), fastf1.get_event(int(year2), circuit), year1, year2
                         
                         else:
                             print("Invalid circuit name(s), please try again.")
@@ -83,8 +84,10 @@ def get_info():
          print("Invalid input, please enter 'y' or 'n'.")
          continue
 
-def get_data(event1, event2):
+def get_data(event1, event2, year1, year2):
    while True:
+          
+          
       
           session_identifiers = ['FP1', 'FP2', 'FP3', 'Q', 'S', 'SS', 'SQ', 'R']
           try: 
@@ -105,8 +108,9 @@ def get_data(event1, event2):
    session1.load(telemetry=True, laps = True)
    session2.load(telemetry=True, laps = True)
 
-
-   while True:
+   if year1 == year2:
+    while True:
+        
        
         driver1 = input("Please input the name of the driver that made first lap: (e.g. 'VER' for Max Verstappen) ").strip().upper()
        
@@ -119,7 +123,7 @@ def get_data(event1, event2):
            print("Invalid input, please input a valid abbreviation (first three letters of the driver's last name).")
            continue
        
-   while True:
+    while True:
        driver2 = input("Please input the name of the driver that made second lap: (e.g. 'VER' for Max Verstappen) ").strip().upper()
        
        if driver2 in session2.results['Abbreviation'].values:
@@ -129,6 +133,39 @@ def get_data(event1, event2):
        else:
            print("Invalid input, please input a valid abbreviation (first three letters of the driver's last name).")
            continue
+
+   else:
+        
+        if input("Were both laps made by the same driver? (y/n) ").strip().lower() == "y":
+            while True:
+                driver1 = input("Please input the name of the driver that made both laps: (e.g. 'VER' for Max Verstappen) ").strip().upper()
+                driver2 = driver1
+                if driver1 in session1.results['Abbreviation'].values and driver1 in session2.results['Abbreviation'].values:
+                    lap1 = session1.laps.pick_drivers(driver1).pick_fastest()
+                    lap2 = session2.laps.pick_drivers(driver1).pick_fastest()
+                    break
+                else:
+                    print("Invalid input, please input a valid abbreviation (first three letters of the driver's last name).")
+                    continue
+
+        else:
+            while True:
+                driver1 = input("Please input the name of the driver that made first lap: (e.g. 'VER' for Max Verstappen) ").strip().upper()
+                if driver1 in session1.results['Abbreviation'].values:
+                    lap1 = session1.laps.pick_drivers(driver1).pick_fastest()
+                    break
+                else:
+                    print("Invalid input, please input a valid abbreviation (first three letters of the driver's last name).")
+                    continue
+
+            while True:
+                driver2 = input("Please input the name of the driver that made second lap: (e.g. 'VER' for Max Verstappen) ").strip().upper()
+                if driver2 in session2.results['Abbreviation'].values:
+                    lap2 = session2.laps.pick_drivers(driver2).pick_fastest()
+                    break
+                else:
+                    print("Invalid input, please input a valid abbreviation (first three letters of the driver's last name).")
+                    continue
        
    full_name1 = session1.results.loc[session1.results['Abbreviation'] == driver1, 'FullName'].iloc[0]
    full_name2 = session2.results.loc[session2.results['Abbreviation'] == driver2, 'FullName'].iloc[0]
@@ -142,7 +179,7 @@ def get_data(event1, event2):
    lap2_time = lap2['LapTime']
    return telemetry1, telemetry2, full_name1, full_name2, session_ident_1, session_ident_2, lap1_time, lap2_time
 
-def compare_laps(telemetry1, telemetry2, full_name1, full_name2, session_ident1, session_ident2, lap1_time, lap2_time):
+def compare_laps(telemetry1, telemetry2, full_name1, full_name2, session_ident1, session_ident2, lap1_time, lap2_time, year1, year2):
     sessions = {"R": "Race", "Q": "Qualifying", "FP1": "Free Practice 1", "FP2": "Free Practice 2", "FP3": "Free Practice 3", "S": "Sprint", "SS": "Sprint Shootout", "SQ": "Sprint Qualifying"}
 
     # Create a distance scale to compare both laps. The scale will be the minimum distance of both laps, with a step of 1 meter. This allows us to compare both laps at the same distance points, even if they have different lengths.
@@ -179,26 +216,28 @@ def compare_laps(telemetry1, telemetry2, full_name1, full_name2, session_ident1,
     delta_t = time1 - time2
 
     # Estimating the cause of time loss
+    significant_points_throttle1, significant_points_throttle2, significant_points_brake1, significant_points_brake2 = find_input_cause(intervals, distance, throttle1, throttle2, brake1, brake2, full_name1, full_name2)
 
     lap1_seconds = lap1_time.total_seconds()
     lap2_seconds = lap2_time.total_seconds()
     
     print(f"Lap {full_name1} {sessions[session_ident1]} vs Lap {full_name2} {sessions[session_ident2]}")
     if lap1_time < lap2_time:
-        print(f"Lap of {full_name1} {sessions[session_ident1]} was faster than Lap {full_name2} {sessions[session_ident2]} by {(lap2_seconds - lap1_seconds):.3f} seconds")
+        print(f"Lap of {full_name1} in {sessions[session_ident1]} {year1} was faster than Lap {full_name2} in {sessions[session_ident2]} {year2} by {(lap2_seconds - lap1_seconds):.3f} seconds")
     elif lap1_time > lap2_time:
-        print(f"Lap of {full_name2} {sessions[session_ident2]} was faster than Lap {full_name1} {sessions[session_ident1]} by {(lap1_seconds - lap2_seconds):.3f} seconds")
+        print(f"Lap of {full_name2} in {sessions[session_ident2]} {year2} was faster than Lap {full_name1} in {sessions[session_ident1]} {year1} by {(lap1_seconds - lap2_seconds):.3f} seconds")
     else:
         print(f"{full_name1} and {full_name2} posted an identical lap time of {lap1_time}")
 
+    print(f"Negative time delta on the graphs means that {full_name1} in {sessions[session_ident1]} {year1} was faster than {full_name2} in {sessions[session_ident2]} {year2}, and positive time delta means the opposite.")
     #Speed graph
-    plot_comparsion(distance, delta_t, v1, v2,full_name1, full_name2, "Speed (km/h)", "Speed comparsion", session_ident1, session_ident2, sessions, intervals)
+    plot_comparsion(distance, delta_t, v1, v2,full_name1, full_name2, "Speed (km/h)", "Speed comparsion", session_ident1, session_ident2, sessions, intervals, year1, year2, significant_points_throttle1 = None, significant_points_throttle2 = None, significant_points_brake1 = None, significant_points_brake2 = None)
 
     #Throttle input graph
-    plot_comparsion(distance, delta_t, throttle1, throttle2,full_name1, full_name2, "Throttle input (%)", "Throttle input comparsion", session_ident1, session_ident2, sessions, intervals)
+    plot_comparsion(distance, delta_t, throttle1, throttle2,full_name1, full_name2, "Throttle input (%)", "Throttle input comparsion", session_ident1, session_ident2, sessions, intervals, year1, year2, significant_points_throttle1, significant_points_throttle2, significant_points_brake1, significant_points_brake2)
 
     #Brake input graph
-    plot_comparsion(distance, delta_t, brake1, brake2,full_name1, full_name2, "Brake input (%)", "Brake input comparsion", session_ident1, session_ident2, sessions, intervals)
+    plot_comparsion(distance, delta_t, brake1, brake2,full_name1, full_name2, "Brake input (0-1)", "Brake input comparsion", session_ident1, session_ident2, sessions, intervals, year1, year2, significant_points_throttle1, significant_points_throttle2, significant_points_brake1, significant_points_brake2)
 
 def convert_laptime(laptime):
     # Convert laptime from seconds to a string in the format of "minutes:seconds.milliseconds"
@@ -208,18 +247,18 @@ def convert_laptime(laptime):
     return f"{minutes}:{seconds:02d}.{milliseconds:03d}"
 
 # Estimating the cause of time loss
-def find_input_cause(intervals, distance, throttle1, throttle2, brake1, brake2, full_name1, full_name2, throttle_ref = 10, brake_ref = 10):
+def find_input_cause(intervals, distance, throttle1, throttle2, brake1, brake2, full_name1, full_name2, throttle_ref = 10, brake_ref = 0.1):
 
-    output = ""
+   
     significant_points_throttle1 = []
     significant_points_throttle2 = []
     significant_points_brake1 = []
     significant_points_brake2 = []
     found_cause = False
 
-    for interval in intervals:
+    for _, interval in intervals.iterrows():
 
-        for i in range(interval["Start"], -1, -1):
+        for i in range(int(interval["Start"]), -1, -1):
             delta_brake = brake1[i] - brake2[i]
             delta_throttle = throttle1[i] - throttle2[i]
             
@@ -229,12 +268,11 @@ def find_input_cause(intervals, distance, throttle1, throttle2, brake1, brake2, 
                 # Driver 2 braked later than driver 1, being therefore faster.
                 if delta_brake > 0:
                     significant_points_brake2.append(distance[i])
-                    output += f"{full_name2} braked {distance[i]} m later {full_name1}\n"
+
 
                 # Driver 1 braked later than driver 2, being therefore faster.
                 else:
                     significant_points_brake1.append(distance[i])
-                    output += f"{full_name1} braked {distance[i]} m later {full_name2}\n"
 
                 found_cause = True
                 break
@@ -243,24 +281,18 @@ def find_input_cause(intervals, distance, throttle1, throttle2, brake1, brake2, 
                 
 
                 if delta_throttle > 0:
-                    significant_points_throttle1.append(distance[i])
-                    output += f"{full_name1} accelereted {distance[i]} m earlier than {full_name2}\n"
+                    significant_points_throttle1.append(distance[i])                  
 
                 else:
                     significant_points_throttle2.append(distance[i])
-                    output += f"{full_name2} accelerated {distance[i]} m earlier than {full_name1}\n"
 
                 found_cause = True
                 break
 
-    print(output)
     return significant_points_throttle1, significant_points_throttle2, significant_points_brake1, significant_points_brake2
 
 
-
-
-
-def plot_comparsion(distance, delta_t, signal1, signal2, full_name1, full_name2, signal_label, title, session_indent1, session_indent2, sessions, intervals, significant_points_throttle1 = None, significant_points_throttle2 = None, significant_points_brake1 = None, significant_points_brake2 = None):
+def plot_comparsion(distance, delta_t, signal1, signal2, full_name1, full_name2, signal_label, title, session_indent1, session_indent2, sessions, intervals, year1, year2, significant_points_throttle1 = None, significant_points_throttle2 = None, significant_points_brake1 = None, significant_points_brake2 = None):
     # Generalising each graph to create
     
     fig,  ax_signal = plt.subplots(figsize=(12,6))
@@ -271,11 +303,11 @@ def plot_comparsion(distance, delta_t, signal1, signal2, full_name1, full_name2,
     for _ , interval in intervals.iterrows():
             if interval["Delta_Speed_Mean"] > 0:
                 color = "green"
-                label = f"{full_name1} in {sessions[session_indent1].lower()} was faster than {full_name2} in {sessions[session_indent2].lower()}"
+                label = f"{full_name1} in {sessions[session_indent1].capitalize()} {year1} was faster than {full_name2} in {sessions[session_indent2].capitalize()} {year2}"
             else:
                 color = "yellow"
-                label = f"{full_name2} in {sessions[session_indent2].lower()} was faster than {full_name1} in {sessions[session_indent1].lower()}"
-    
+                label = f"{full_name2} in {sessions[session_indent2].capitalize()} {year2} was faster than {full_name1} in {sessions[session_indent1].capitalize()} {year1}"
+
             if label in labels:
                 label = "_nolegend_"
             else:
@@ -286,25 +318,52 @@ def plot_comparsion(distance, delta_t, signal1, signal2, full_name1, full_name2,
                 shaded_areas.append(shaded_area)
                 shaded_labels.append(label)
 
-    line1, = ax_signal.plot(distance, signal1, label = f"{full_name1} in {sessions[session_indent1]}", color = "blue")
-    line2, = ax_signal.plot(distance, signal2, label = f"{full_name2} in {sessions[session_indent2]}", color = "red")
+    line1, = ax_signal.plot(distance, signal1, label = f"{full_name1} in {sessions[session_indent1]} {year1}", color = "blue")
+    line2, = ax_signal.plot(distance, signal2, label = f"{full_name2} in {sessions[session_indent2]} {year2}", color = "red")
+
+    #Marking significant points of throttle and brake inputs on the graph, if they exist.
+    inputs_legend = []
+    signal_type = signal_label.casefold()
+
+    if "throttle" in signal_type:
+        point_groups = [(significant_points_throttle1, "green", f"{full_name1} in {sessions[session_indent1]} {year1} accelerated more than {full_name2} in {sessions[session_indent2]} {year2}"),(significant_points_throttle2, "orange", f"{full_name2} in {sessions[session_indent2]} {year2} accelerated more than {full_name1} in {sessions[session_indent1]} {year1}")]
+
+    elif "brake" in signal_type:
+        point_groups = [(significant_points_brake1, "green", f"{full_name1} in {sessions[session_indent1]} {year1} braked less than {full_name2} in {sessions[session_indent2]} {year2}"),(significant_points_brake2, "orange", f"{full_name2} in {sessions[session_indent2]} {year2} braked less than {full_name1} in {sessions[session_indent1]} {year1}"),]
+
+    else:
+        point_groups = []
+
+    for points, color, driver_legend  in point_groups:
+        if points is None or len(points) == 0:
+            continue
+
+        first_line = None
+
+        for point in points:
+            line = ax_signal.axvline(x=point, color=color, linestyle = ":", label = driver_legend)
+
+            if first_line is None:
+                first_line = line
+
+        inputs_legend.append(first_line)
 
     # Defining the color of 'line_delta' based on which driver is ahead.
     red_delta = np.where(delta_t > 0, delta_t, np.nan)
     blue_delta = np.where(delta_t < 0, delta_t, np.nan)
 
-    line_delta, = ax_delta.plot(distance, red_delta, label=f"Time delta between {full_name1} in {sessions[session_indent1]} and {full_name2} in {sessions[session_indent2]}",color="red",linestyle="--",)
+    line_delta, = ax_delta.plot(distance, red_delta, label=f"Time delta between {full_name1} in {sessions[session_indent1]} {year1} and {full_name2} in {sessions[session_indent2]} {year2}",color="red",linestyle="--",)
     ax_delta.plot(distance,blue_delta,color="blue",linestyle="--",label="_nolegend_",)
    
     ax_signal.set_xlabel("Distance (m)")
     ax_signal.set_ylabel(signal_label)
     ax_delta.set_ylabel("Delta t (s)")
-    ax_delta.set_ylim(-2.0,2.0)
+    ax_delta.set_ylim(-3.5,3.5)
     ax_delta.axhline(0, color = "gray", linestyle = ":")
     ax_signal.set_title(title)
     ax_signal.grid(True)
-    visuals = [line1, line2, line_delta, *shaded_areas]
-    legend_labels = [line1.get_label(),line2.get_label(),line_delta.get_label(),*shaded_labels]
+    visuals = [line1, line2, line_delta, *shaded_areas, *inputs_legend]
+    legend_labels = [line1.get_label(), line2.get_label(), line_delta.get_label(), *shaded_labels, *[line.get_label() for line in inputs_legend]]
     ax_signal.legend(visuals, legend_labels)
     fig.tight_layout()
     plt.show()
