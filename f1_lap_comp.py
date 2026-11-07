@@ -9,8 +9,8 @@ fastf1.Cache.enable_cache('cache_dir')
 def main():
   print("Welcome to f1 lap comparsion, here you'll be able to analyse two different laps from an f1 session and understand it's differences")
   event1, event2, year1, year2 = get_info()
-  telemetry1, telemetry2, full_name1, full_name2, session_ident_1, session_ident_2, lap1_time, lap2_time = get_data(event1, event2, year1, year2)
-  distance =compare_laps(telemetry1, telemetry2, full_name1, full_name2, session_ident_1, session_ident_2, lap1_time, lap2_time, year1, year2)
+  telemetry1, telemetry2, full_name1, full_name2, session_ident_1, session_ident_2, lap1_time, lap2_time, lap1_start_time, lap2_start_time = get_data(event1, event2, year1, year2)
+  distance =compare_laps(telemetry1, telemetry2, full_name1, full_name2, session_ident_1, session_ident_2, lap1_time, lap2_time, year1, year2, lap1_start_time, lap2_start_time)
   
 
 
@@ -173,13 +173,15 @@ def get_data(event1, event2, year1, year2):
    telemetry1 = lap1.get_telemetry()
    telemetry2 = lap2.get_telemetry()
 
-   
+   # Saving each lap's starting time
+   lap1_start_time = lap1["LapStartTime"]
+   lap2_start_time = lap2["LapStartTime"]
 
-   lap1_time = lap1['LapTime']
-   lap2_time = lap2['LapTime']
-   return telemetry1, telemetry2, full_name1, full_name2, session_ident_1, session_ident_2, lap1_time, lap2_time
+   lap1_time = lap1["LapTime"]
+   lap2_time = lap2["LapTime"]
+   return telemetry1, telemetry2, full_name1, full_name2, session_ident_1, session_ident_2, lap1_time, lap2_time, lap1_start_time, lap2_start_time
 
-def compare_laps(telemetry1, telemetry2, full_name1, full_name2, session_ident1, session_ident2, lap1_time, lap2_time, year1, year2):
+def compare_laps(telemetry1, telemetry2, full_name1, full_name2, session_ident1, session_ident2, lap1_time, lap2_time, year1, year2, lap1_start_time, lap2_start_time):
     sessions = {"R": "Race", "Q": "Qualifying", "FP1": "Free Practice 1", "FP2": "Free Practice 2", "FP3": "Free Practice 3", "S": "Sprint", "SS": "Sprint Shootout", "SQ": "Sprint Qualifying"}
 
     # Create a distance scale to compare both laps. The scale will be the minimum distance of both laps, with a step of 1 meter. This allows us to compare both laps at the same distance points, even if they have different lengths.
@@ -211,10 +213,14 @@ def compare_laps(telemetry1, telemetry2, full_name1, full_name2, session_ident1,
     intervals = data[data["Significant_Delta_Speed"]].groupby("Intervals").agg(Start = ("Distance", "min"), End = ("Distance", "max"), Delta_Speed_Mean = ("Delta_Speed", "mean"), Delta_Speed_Max = ("Delta_Speed", lambda x: x.abs().max()))
 
     # Calculate delta t beetween both laps at each point in the distance scale.
-    time1 = np.interp(distance, telemetry1["Distance"], telemetry1["Time"].dt.total_seconds())
-    time2 = np.interp(distance, telemetry2["Distance"], telemetry2["Time"].dt.total_seconds())  
-    delta_t = time1 - time2
+    elapsed1 = (telemetry1["Time"]).dt.total_seconds()
+    elapsed2 = (telemetry2["Time"]).dt.total_seconds()
 
+    time1 = np.interp(distance, telemetry1["Distance"], elapsed1)  
+    time2 = np.interp(distance, telemetry2["Distance"], elapsed2)
+
+    delta_t = time1 - time2
+    
     # Estimating the cause of time loss
     significant_points_throttle1, significant_points_throttle2, significant_points_brake1, significant_points_brake2 = find_input_cause(intervals, distance, throttle1, throttle2, brake1, brake2, full_name1, full_name2)
 
@@ -238,7 +244,11 @@ def compare_laps(telemetry1, telemetry2, full_name1, full_name2, session_ident1,
 
     #Brake input graph
     plot_comparsion(distance, delta_t, brake1, brake2,full_name1, full_name2, "Brake input (0-1)", "Brake input comparsion", session_ident1, session_ident2, sessions, intervals, year1, year2, significant_points_throttle1, significant_points_throttle2, significant_points_brake1, significant_points_brake2)
-
+    print("Última distância do gráfico:", distance[-1])
+    print("Última distância telemetria 1:", telemetry1["Distance"].max())
+    print("Última distância telemetria 2:", telemetry2["Distance"].max())
+    print("Delta no último ponto:", delta_t[-1])
+    print("Delta oficial com sinal:", lap1_time.total_seconds() - lap2_time.total_seconds())
 def convert_laptime(laptime):
     # Convert laptime from seconds to a string in the format of "minutes:seconds.milliseconds"
     minutes = int(laptime // 60)
