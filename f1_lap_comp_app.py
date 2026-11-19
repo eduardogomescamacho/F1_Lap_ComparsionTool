@@ -59,7 +59,7 @@ def lap_picker(session, session_code: str, session_label: str, year: int, column
             segments = sorted(laps["Q"].dropna().unique(), key=int)
             if segments:
                 segment_choices = ["All"] + [f"Q{int(q)}" for q in segments]
-                segment = st.selectbox(f"Segmento ({prefix})", segment_choices, key=f"{prefix}_segment")
+                segment = st.selectbox(f"Qualifying segment ({prefix})", segment_choices, key=f"{prefix}_segment")
                 if segment != "All":
                     laps = laps[laps["Q"] == int(segment[1:])]
         valid = laps[laps["LapTime"].notna()].copy()
@@ -113,37 +113,87 @@ def comparison_figures(telemetry1, telemetry2, label1, label2):
     points = core.find_input_cause(intervals.rename(columns={"Mean": "Delta_Speed_Mean"}), distance, throttle1, throttle2, brake1, brake2)
 
     figures = []
-    for signal1, signal2, ylabel, title, point_type in [
-        (v1, v2, "Speed (km/h)", "Speed Comparison", None),
-        (throttle1, throttle2, "Throttle (%)", "Throttle Comparison", "throttle"),
-        (brake1, brake2, "Brake (0–1)", "Brake Comparison", "brake"),
+    for signal1, signal2, signal_label, title, point_type in [
+        (v1, v2, "Speed (km/h)", "Speed comparison", None),
+        (throttle1, throttle2, "Throttle input (%)", "Throttle input comparison", "throttle"),
+        (brake1, brake2, "Brake input (0-1)", "Brake input comparison", "brake"),
     ]:
-        fig, ax = plt.subplots(figsize=(12, 5))
-        delta_ax = ax.twinx()
+        fig, ax_signal = plt.subplots(figsize=(12, 6))
+        ax_delta = ax_signal.twinx()
+        labels = set()
+        shaded_areas = []
+        shaded_labels = []
         for _, interval in intervals.iterrows():
-            color = "green" if interval["Mean"] > 0 else "gold"
-            ax.axvspan(interval["Start"], interval["End"], color=color, alpha=0.22)
-        ax.plot(distance, signal1, color="blue", label=label1)
-        ax.plot(distance, signal2, color="red", label=label2)
-        delta_ax.plot(distance, np.where(delta_t > 0, delta_t, np.nan), "r--", label="Time delta")
-        delta_ax.plot(distance, np.where(delta_t < 0, delta_t, np.nan), "b--")
+            if interval["Mean"] > 0:
+                color = "green"
+                shade_label = f"{label1} was faster than {label2}"
+            else:
+                color = "yellow"
+                shade_label = f"{label2} was faster than {label1}"
+            legend_label = shade_label if shade_label not in labels else "_nolegend_"
+            if legend_label != "_nolegend_":
+                labels.add(shade_label)
+            shaded = ax_signal.axvspan(
+                xmin=interval["Start"], xmax=interval["End"],
+                color=color, alpha=0.3, label=legend_label,
+            )
+            if legend_label != "_nolegend_":
+                shaded_areas.append(shaded)
+                shaded_labels.append(shade_label)
+
+        line1, = ax_signal.plot(distance, signal1, label=label1, color="blue")
+        line2, = ax_signal.plot(distance, signal2, label=label2, color="red")
+        input_legend = []
         if point_type == "throttle":
-            for pts, color in ((points[0], "green"), (points[1], "orange")):
-                for point in pts:
-                    ax.axvline(point, color=color, linestyle=":", alpha=.8)
+            point_groups = [
+                (points[0], "green", f"{label1} used more throttle than {label2}"),
+                (points[1], "orange", f"{label2} used more throttle than {label1}"),
+            ]
         elif point_type == "brake":
-            for pts, color in ((points[2], "green"), (points[3], "orange")):
-                for point in pts:
-                    ax.axvline(point, color=color, linestyle=":", alpha=.8)
-        ax.set(xlabel="Distance (m)", ylabel=ylabel, title=title)
-        delta_ax.set_ylabel("Time delta (s)")
-        delta_ax.axhline(0, color="gray", linestyle=":")
-        ax.grid(True, alpha=.25)
-        lines = ax.get_lines() + delta_ax.get_lines()[:1]
-        ax.legend(lines, [line.get_label() for line in lines], loc="upper right")
-        fig.tight_layout()
+            point_groups = [
+                (points[2], "green", f"{label1} applied more brake than {label2}"),
+                (points[3], "orange", f"{label2} applied more brake than {label1}"),
+            ]
+        else:
+            point_groups = []
+        for point_values, color, point_label in point_groups:
+            if not point_values:
+                continue
+            first_line = None
+            for point in point_values:
+                line = ax_signal.axvline(
+                    x=point, color=color, linestyle=":", label=point_label,
+                )
+                if first_line is None:
+                    first_line = line
+            input_legend.append(first_line)
+
+        red_delta = np.where(delta_t > 0, delta_t, np.nan)
+        blue_delta = np.where(delta_t < 0, delta_t, np.nan)
+        line_delta, = ax_delta.plot(
+            distance, red_delta,
+            label=f"Time delta: {label1} vs {label2}", color="red", linestyle="--",
+        )
+        ax_delta.plot(distance, blue_delta, color="blue", linestyle="--", label="_nolegend_")
+        ax_signal.set_xlabel("Distance (m)")
+        ax_signal.set_ylabel(signal_label)
+        ax_delta.set_ylabel("Delta t (s)")
+        ax_delta.axhline(0, color="gray", linestyle=":")
+        ax_signal.set_title(title)
+        ax_signal.grid(True)
+        visuals = [line1, line2, line_delta, *shaded_areas, *input_legend]
+        legend_labels = [
+            line1.get_label(), line2.get_label(), line_delta.get_label(),
+            *shaded_labels, *[line.get_label() for line in input_legend],
+        ]
+        fig.legend(
+            visuals, legend_labels, loc="lower center",
+            bbox_to_anchor=(0.5, 0.02), fontsize="medium",
+        )
+        fig.tight_layout(rect=(0, 0.32, 1, 1))
         figures.append(fig)
-    return figures
+    final_delta_t = float(delta_t[-1]) if len(delta_t) else float("nan")
+    return figures, final_delta_t
 
 
 def main():
@@ -197,9 +247,18 @@ def main():
             st.subheader("Result")
             faster = label1 if seconds1 <= seconds2 else label2
             st.metric("Lap time difference", f"{abs(seconds1 - seconds2):.3f} s", f"Faster: {faster}")
-            st.caption("A negative time delta means Lap 1 was ahead; a positive value means Lap 2 was ahead. Shaded areas mark speed differences of at least 7.5 km/h.")
-            for fig in comparison_figures(result1[0], result2[0], label1, label2):
-                st.pyplot(fig, use_container_width=True)
+            st.caption(
+                f"A negative time delta means {label1} was ahead; a positive value means {label2} was ahead. "
+                "Shaded areas mark speed differences of at least 7.5 km/h."
+            )
+            figures, final_delta_t = comparison_figures(result1[0], result2[0], label1, label2)
+            st.metric(
+                f"Final time delta ({label1} − {label2})",
+                f"{final_delta_t:+.3f} s",
+            )
+            for fig in figures:
+                # Keep Matplotlib's original 12x6-inch figure size and layout.
+                st.pyplot(fig)
                 plt.close(fig)
         except Exception as exc:
             st.error(f"Could not compare these laps: {exc}")
